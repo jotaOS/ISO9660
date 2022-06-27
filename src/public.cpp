@@ -71,7 +71,7 @@ size_t publist(std::PID client, Inode inode, size_t page) {
 	if(page > npages)
 		return npages; // No more pages left
 
-	memcpy(remote, marshalled+page*4096, 4096);
+	memcpy(remote, marshalled+page*PAGE_SIZE, PAGE_SIZE);
 	return npages;
 }
 
@@ -84,7 +84,7 @@ size_t pubread(std::PID client, Inode inode, size_t page) {
 
 	// How big is that file?
 	size_t fullsz = getFileSize(inode);
-	size_t npages = (fullsz + 4096 - 1) / 4096;
+	size_t npages = (fullsz + PAGE_SIZE - 1) / PAGE_SIZE;
 	if(page >= npages)
 		return 0;
 	// Page now is guaranteed to be in limits
