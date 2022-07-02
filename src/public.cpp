@@ -3,28 +3,41 @@
 #include <shared_memory>
 #include "fs/fs.hpp"
 #include <unordered_map>
+#include <mutex>
 
+static std::mutex setupLock;
 static bool isSetup = false;
 std::UUID uuid;
 bool setup(std::PID client, uint64_t uuida, uint64_t uuidb) {
 	IGNORE(client);
 
-	if(isSetup)
+	setupLock.acquire();
+	if(isSetup) {
+		setupLock.release();
 		return false;
+	}
 
 	uuid = {uuida, uuidb};
-	if(!readPVD())
+	if(!readPVD()) {
+		setupLock.release();
 		return false;
+	}
 
 	isSetup = true;
+	setupLock.release();
 	return true;
 }
 
 static std::unordered_map<std::PID, uint8_t*> shared;
+static std::mutex sharedLock;
 
 bool connect(std::PID client, std::SMID smid) {
-	if(!isSetup)
+	setupLock.acquire();
+	if(!isSetup) {
+		setupLock.release();
 		return false;
+	}
+	setupLock.release();
 
 	// Already connected?
 	if(!std::smRequest(client, smid))
@@ -35,15 +48,26 @@ bool connect(std::PID client, std::SMID smid) {
 		return false;
 
 	// TODO: unmap previous, release SMID
+	sharedLock.acquire();
 	shared[client] = (uint8_t*)ptr;
+	sharedLock.release();
 	return true;
 }
 
 Inode getRoot(std::PID client) {
-	if(!isSetup)
+	setupLock.acquire();
+	if(!isSetup) {
+		setupLock.release();
 		return 0;
-	if(shared.find(client) == shared.end())
+	}
+	setupLock.release();
+
+	sharedLock.acquire();
+	if(shared.find(client) == shared.end()) {
+		sharedLock.release();
 		return 0;
+	}
+	sharedLock.release();
 
 	return rootInode;
 }
@@ -58,11 +82,20 @@ Inode getRoot(std::PID client) {
 }*/
 
 size_t publist(std::PID client, Inode inode, size_t page) {
-	if(!isSetup)
+	setupLock.acquire();
+	if(!isSetup) {
+		setupLock.release();
 		return 0;
-	if(shared.find(client) == shared.end())
+	}
+
+	sharedLock.acquire();
+	if(shared.find(client) == shared.end()) {
+		sharedLock.release();
 		return 0;
+	}
+
 	uint8_t* remote = shared[client];
+	sharedLock.release();
 
 	uint8_t* marshalled = nullptr;
 	size_t npages = 0;
@@ -76,11 +109,19 @@ size_t publist(std::PID client, Inode inode, size_t page) {
 }
 
 size_t pubread(std::PID client, Inode inode, size_t page) {
-	if(!isSetup)
+	setupLock.acquire();
+	if(!isSetup) {
+		setupLock.release();
 		return 0;
-	if(shared.find(client) == shared.end())
+	}
+
+	sharedLock.acquire();
+	if(shared.find(client) == shared.end()) {
+		sharedLock.release();
 		return 0;
+	}
 	uint8_t* remote = shared[client];
+	sharedLock.release();
 
 	// How big is that file?
 	size_t fullsz = getFileSize(inode);
