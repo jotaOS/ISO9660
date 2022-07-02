@@ -28,9 +28,6 @@ bool setup(std::PID client, uint64_t uuida, uint64_t uuidb) {
 	return true;
 }
 
-static std::unordered_map<std::PID, uint8_t*> shared;
-static std::mutex sharedLock;
-
 bool connect(std::PID client, std::SMID smid) {
 	setupLock.acquire();
 	if(!isSetup) {
@@ -39,35 +36,18 @@ bool connect(std::PID client, std::SMID smid) {
 	}
 	setupLock.release();
 
-	// Already connected?
-	if(!std::smRequest(client, smid))
-		return false;
-
-	auto ptr = std::smMap(smid);
-	if(!ptr)
-		return false;
-
-	// TODO: unmap previous, release SMID
-	sharedLock.acquire();
-	shared[client] = (uint8_t*)ptr;
-	sharedLock.release();
-	return true;
+	return std::sm::connect(client, smid);
 }
 
 Inode getRoot(std::PID client) {
+	IGNORE(client);
+
 	setupLock.acquire();
 	if(!isSetup) {
 		setupLock.release();
 		return 0;
 	}
 	setupLock.release();
-
-	sharedLock.acquire();
-	if(shared.find(client) == shared.end()) {
-		sharedLock.release();
-		return 0;
-	}
-	sharedLock.release();
 
 	return rootInode;
 }
@@ -87,15 +67,11 @@ size_t publist(std::PID client, Inode inode, size_t page) {
 		setupLock.release();
 		return 0;
 	}
+	setupLock.release();
 
-	sharedLock.acquire();
-	if(shared.find(client) == shared.end()) {
-		sharedLock.release();
+	uint8_t* remote = std::sm::get(client);
+	if(!remote)
 		return 0;
-	}
-
-	uint8_t* remote = shared[client];
-	sharedLock.release();
 
 	uint8_t* marshalled = nullptr;
 	size_t npages = 0;
@@ -115,13 +91,9 @@ size_t pubread(std::PID client, Inode inode, size_t page) {
 		return 0;
 	}
 
-	sharedLock.acquire();
-	if(shared.find(client) == shared.end()) {
-		sharedLock.release();
+	uint8_t* remote = std::sm::get(client);
+	if(!remote)
 		return 0;
-	}
-	uint8_t* remote = shared[client];
-	sharedLock.release();
 
 	// How big is that file?
 	size_t fullsz = getFileSize(inode);
