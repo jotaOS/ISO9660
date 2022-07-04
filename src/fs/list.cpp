@@ -18,11 +18,27 @@ std::unordered_map<std::string, File> list(Inode inode) {
 		if(!(dir->length))
 			break; // That was all :)
 
+		union {
+				uint8_t date[7];
+				uint64_t raw;
+		} u;
+		memcpy(u.date, dir->date, 7);
+
+		File file;
+		file.inode = extend * SECTOR_SIZE + offset;
+		file.date = u.raw;
+		file.size = dir->extlen;
+		file.flags = dir->flags;
+
 		size_t len = dir->lenId;
 		if(len == 1 && dir->id[0] == '\0') {
-			// '.' entry, ignore
+			// '.' entry (rename)
+			file.namesz = 1;
+			ret["."] = file;
 		} else if(len == 1 && dir->id[0] == '\1') {
-			// '..' entry, ignore
+			// '..' entry (rename)
+			file.namesz = 2;
+			ret[".."] = file;
 		} else {
 			// Regular entry
 			// Do some shenanigans to get a std::string
@@ -42,17 +58,6 @@ std::unordered_map<std::string, File> list(Inode inode) {
 					str.pop_back();
 			}
 
-			union {
-				uint8_t date[7];
-				uint64_t raw;
-			} u;
-			memcpy(u.date, dir->date, 7);
-
-			File file;
-			file.inode = extend * SECTOR_SIZE + offset;
-			file.date = u.raw;
-			file.size = dir->extlen;
-			file.flags = dir->flags;
 			file.namesz = str.size();
 			ret[str] = file;
 		}
