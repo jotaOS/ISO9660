@@ -105,12 +105,14 @@ size_t pubread(std::PID client, Inode inode, size_t page) {
 
 	// What LBA is that?
 	size_t nLBAs = (fullsz + SECTOR_SIZE - 1) / SECTOR_SIZE;
-	LBA lba = getFileLBA(inode);
-	lba += page / 2;
+	LBA seqlba = page * 2; // Which one sequentially
+
+	LBA startlba = getFileLBA(inode); // File start here
+	LBA lba = startlba + seqlba; // Absolute LBA to read
 
 	// Perform the read
 	size_t toReadLBAs = 1;
-	if(lba + 1 < nLBAs)
+	if(seqlba + 1 < nLBAs)
 		++toReadLBAs; // Next one is in limits
 
 	size_t hasRead = toReadLBAs * SECTOR_SIZE;
@@ -119,13 +121,34 @@ size_t pubread(std::PID client, Inode inode, size_t page) {
 	// I have read "hasRead" bytes
 	// However, might have read some zeros there
 	// How much have I actually read?
+	// This is way too verbose, but otherwise it's incomprehensible
 	size_t ret = 0;
-	if(toReadLBAs == 2)
-		ret += SECTOR_SIZE; // First one is surely full
-	if(lba + toReadLBAs < nLBAs)
-		ret += SECTOR_SIZE; // Second one was full too
-	else
-		ret += fullsz % SECTOR_SIZE;
+	if(toReadLBAs == 1) {
+		// Case 1: only one LBA. Was it the last one?
+		if(seqlba + 1 == nLBAs) {
+			// Case 1.1: yep, last one; tell caller I've read the last bytes
+			ret = fullsz % SECTOR_SIZE;
+		} else {
+			// Case 1.2: it wasn't the last one, so I've read it all
+			ret = SECTOR_SIZE;
+		}
+	} else if(toReadLBAs == 2) {
+		// Case 2: two LBAs
+		if(seqlba + 2 < nLBAs) {
+			// Case 2.1: second one is not the last, so I've read everything
+			ret = 2 * SECTOR_SIZE;
+		} else if(seqlba + 2 == nLBAs) {
+			// Case 2.2: second one is the last
+			ret = SECTOR_SIZE; // First one completely read
+			ret += fullsz % SECTOR_SIZE;
+		} else {
+			// Case 2.3: first one is the last, impossible
+			HALT_AND_CATCH_FIRE();
+		}
+	}
+
+	// Clear the rest 👀
+	memset(remote+ret, 0, PAGE_SIZE - ret);
 
 	return ret;
 }
