@@ -90,6 +90,7 @@ size_t pubread(std::PID client, Inode inode, size_t page) {
 		setupLock.release();
 		return 0;
 	}
+	setupLock.release();
 
 	uint8_t* remote = std::sm::get(client);
 	if(!remote)
