@@ -7,47 +7,33 @@
 
 std::PID block = 0;
 
-uint8_t* buffer = nullptr;;
-bool readLBA(LBA lba) {
+bool readLBAs(std::SMID smid, LBA lba, size_t n) {
 	if(!block) {
 		block = std::resolve("block");
 		if(!block)
 			return false;
 
-		std::SMID smid = std::smMake();
-		buffer = (uint8_t*)std::smMap(smid);
-		std::smAllow(smid, block);
-		bool result = std::rpc(block, std::block::CONNECT, smid);
-		if(!result)
+		bool ret = std::rpc(block,
+							std::block::SELECT,
+							uuid.a,
+							uuid.b);
+		if(!ret) {
+			block = 0;
 			return false;
-	}
-
-	return std::rpc(block,
-					std::block::READ,
-					uuid.a,
-					uuid.b,
-					lba,
-					SECTOR_SIZE);
-}
-
-uint8_t* readBytes(LBA lba, size_t sz, uint8_t* hint) {
-	uint8_t* ret = hint ? hint : new uint8_t[sz];
-	uint8_t* cur = ret;
-
-	size_t sectors = (sz + SECTOR_SIZE - 1) / SECTOR_SIZE;
-	while(sectors--) {
-		if(!readLBA(lba)) {
-			delete [] ret;
-			return nullptr;
 		}
-
-		size_t copied = std::min(sz, (size_t)SECTOR_SIZE);
-		memcpy(cur, buffer, copied);
-
-		cur += copied;
-		sz -= copied;
-		++lba;
 	}
+
+	std::smAllow(smid, block);
+	bool ret = std::rpc(block,
+						std::block::READ,
+						smid,
+						lba,
+						n * SECTOR_SIZE);
 
 	return ret;
+}
+
+bool readBytes(std::SMID smid, LBA lba, size_t sz) {
+	size_t sectors = (sz + SECTOR_SIZE - 1) / SECTOR_SIZE;
+	return readLBAs(smid, lba, sectors);
 }

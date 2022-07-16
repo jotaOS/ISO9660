@@ -28,17 +28,6 @@ bool setup(std::PID client, uint64_t uuida, uint64_t uuidb) {
 	return true;
 }
 
-bool connect(std::PID client, std::SMID smid) {
-	setupLock.acquire();
-	if(!isSetup) {
-		setupLock.release();
-		return false;
-	}
-	setupLock.release();
-
-	return std::sm::connect(client, smid);
-}
-
 Inode getRoot(std::PID client) {
 	IGNORE(client);
 
@@ -52,39 +41,46 @@ Inode getRoot(std::PID client) {
 	return rootInode;
 }
 
-/*Inode getInode(std::PID client) {
-	if(!isSetup)
-		return 0;
-	if(shared.find(client) == shared.end())
-		return 0;
+size_t publistSize(std::PID client, Inode inode) {
+	IGNORE(client);
 
-	return findInode((char*)(shared[client]));
-}*/
-
-size_t publist(std::PID client, Inode inode, size_t page) {
 	setupLock.acquire();
 	if(!isSetup) {
 		setupLock.release();
 		return 0;
 	}
 	setupLock.release();
-
-	uint8_t* remote = std::sm::get(client);
-	if(!remote)
-		return 0;
 
 	uint8_t* marshalled = nullptr;
 	size_t npages = 0;
 	marshallList(inode, marshalled, npages);
-
-	if(page > npages)
-		return npages; // No more pages left
-
-	memcpy(remote, marshalled+page*PAGE_SIZE, PAGE_SIZE);
 	return npages;
 }
 
-size_t pubread(std::PID client, Inode inode, size_t page) {
+bool publist(std::PID client, std::SMID smid, Inode inode) {
+	setupLock.acquire();
+	if(!isSetup) {
+		setupLock.release();
+		return false;
+	}
+	setupLock.release();
+
+	auto link = std::sm::link(client, smid);
+	size_t npages = link.s;
+	if(!npages)
+		return false;
+	uint8_t* buffer = link.f;
+
+	uint8_t* marshalled = nullptr;
+	size_t mnpages = 0;
+	marshallList(inode, marshalled, mnpages);
+
+	memcpy(buffer, marshalled, std::min(npages, mnpages) * PAGE_SIZE);
+	std::sm::unlink(smid);
+	return true;
+}
+
+size_t pubread(std::PID client, std::SMID smid, Inode inode, size_t page, size_t n) {
 	setupLock.acquire();
 	if(!isSetup) {
 		setupLock.release();
@@ -92,71 +88,23 @@ size_t pubread(std::PID client, Inode inode, size_t page) {
 	}
 	setupLock.release();
 
-	uint8_t* remote = std::sm::get(client);
-	if(!remote)
-		return 0;
+	// About the shared memory
+	auto link = std::sm::link(client, smid);
+	if(!link.s)
+		return false;
 
-	// How big is that file?
-	size_t fullsz = getFileSize(inode);
-	size_t npages = (fullsz + PAGE_SIZE - 1) / PAGE_SIZE;
-	if(page >= npages)
-		return 0;
-	// Page now is guaranteed to be in limits
+	// About the file
+	LBA lba = getFileLBA(inode) + page * 2;
 
-	// What LBA is that?
-	size_t nLBAs = (fullsz + SECTOR_SIZE - 1) / SECTOR_SIZE;
-	LBA seqlba = page * 2; // Which one sequentially
-
-	LBA startlba = getFileLBA(inode); // File start here
-	LBA lba = startlba + seqlba; // Absolute LBA to read
-
-	// Perform the read
-	size_t toReadLBAs = 1;
-	if(seqlba + 1 < nLBAs)
-		++toReadLBAs; // Next one is in limits
-
-	size_t hasRead = toReadLBAs * SECTOR_SIZE;
-	readBytes(lba, hasRead, remote);
-
-	// I have read "hasRead" bytes
-	// However, might have read some zeros there
-	// How much have I actually read?
-	// This is way too verbose, but otherwise it's incomprehensible
-	size_t ret = 0;
-	if(toReadLBAs == 1) {
-		// Case 1: only one LBA. Was it the last one?
-		if(seqlba + 1 == nLBAs) {
-			// Case 1.1: yep, last one; tell caller I've read the last bytes
-			ret = fullsz % SECTOR_SIZE;
-		} else {
-			// Case 1.2: it wasn't the last one, so I've read it all
-			ret = SECTOR_SIZE;
-		}
-	} else if(toReadLBAs == 2) {
-		// Case 2: two LBAs
-		if(seqlba + 2 < nLBAs) {
-			// Case 2.1: second one is not the last, so I've read everything
-			ret = 2 * SECTOR_SIZE;
-		} else if(seqlba + 2 == nLBAs) {
-			// Case 2.2: second one is the last
-			ret = SECTOR_SIZE; // First one completely read
-			ret += fullsz % SECTOR_SIZE;
-		} else {
-			// Case 2.3: first one is the last, impossible
-			HALT_AND_CATCH_FIRE();
-		}
-	}
-
-	// Clear the rest 👀
-	memset(remote+ret, 0, PAGE_SIZE - ret);
-
+	auto ret = readBytes(smid, lba, n * PAGE_SIZE);
+	std::sm::unlink(smid);
 	return ret;
 }
 
 void exportProcedures() {
 	std::exportProcedure((void*)setup, 2);
-	std::exportProcedure((void*)connect, 1);
 	std::exportProcedure((void*)getRoot, 0);
+	std::exportProcedure((void*)publistSize, 1);
 	std::exportProcedure((void*)publist, 2);
-	std::exportProcedure((void*)pubread, 2);
+	std::exportProcedure((void*)pubread, 4);
 }

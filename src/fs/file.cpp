@@ -1,7 +1,15 @@
 #include "fs.hpp"
+#include <shared_memory>
 
+static std::SMID smid = 0;
+static uint8_t* buffer = nullptr;
 Directory* getFileDirectory(Inode inode) {
-	if(!readLBA(inode / SECTOR_SIZE))
+	if(!smid) {
+		smid = std::smMake();
+		buffer = (uint8_t*)std::smMap(smid);
+	}
+
+	if(!readLBAs(smid, inode / SECTOR_SIZE, 1))
 		return nullptr;
 
 	return (Directory*)(buffer + (inode % SECTOR_SIZE));

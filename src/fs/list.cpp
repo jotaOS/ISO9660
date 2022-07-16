@@ -1,4 +1,5 @@
 #include "fs.hpp"
+#include <shared_memory>
 
 // Given an inode, find all its files and subdirectories
 std::unordered_map<std::string, File> list(Inode inode) {
@@ -11,10 +12,18 @@ std::unordered_map<std::string, File> list(Inode inode) {
 
 	std::unordered_map<std::string, File> ret;
 
-	uint8_t* tmp = readBytes(extend, sz);
+	size_t npages = (sz + PAGE_SIZE - 1) / PAGE_SIZE;
+	std::SMID smid = std::smMake(npages);
+	uint8_t* buffer = (uint8_t*)std::smMap(smid);
+	if(!readBytes(smid, extend, sz)) {
+		std::munmap(buffer, npages);
+		std::smDrop(smid);
+		return {};
+	}
+
 	size_t offset = 0;
 	while(true) {
-		Directory* dir = (Directory*)(tmp + offset);
+		Directory* dir = (Directory*)(buffer + offset);
 		if(!(dir->length))
 			break; // That was all :)
 
@@ -42,11 +51,11 @@ std::unordered_map<std::string, File> list(Inode inode) {
 		} else {
 			// Regular entry
 			// Do some shenanigans to get a std::string
-			char* tmpp = new char[len + 1];
-			tmpp[len] = '\0';
-			memcpy(tmpp, dir->id, len);
-			std::string str(tmpp);
-			delete [] tmpp;
+			char* tmp = new char[len + 1];
+			tmp[len] = '\0';
+			memcpy(tmp, dir->id, len);
+			std::string str(tmp);
+			delete [] tmp;
 
 			// If it's a file, it ends in ";1"
 			str = str.split(';')[0];
@@ -64,7 +73,8 @@ std::unordered_map<std::string, File> list(Inode inode) {
 
 		offset += dir->length;
 	}
-	delete [] tmp;
 
+	std::munmap(buffer, npages);
+	std::smDrop(smid);
 	return ret;
 }

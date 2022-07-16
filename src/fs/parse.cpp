@@ -1,5 +1,5 @@
 #include "fs.hpp"
-#include <cstdio>
+#include <shared_memory>
 
 union {
 	char raw[SECTOR_SIZE];
@@ -11,11 +11,17 @@ LBA rootLBA = 0;
 size_t rootSize = 0;
 
 bool readPVD() {
+	std::SMID smid = std::smMake();
+	uint8_t* buffer = (uint8_t*)std::smMap(smid);
+
 	// Start looking through volume descriptors
 	size_t lba = 0x10;
 	while(true) {
-		if(!readLBA(lba))
+		if(!readLBAs(smid, lba, 1)) {
+			std::munmap(buffer);
+			std::smDrop(smid);
 			return false;
+		}
 
 		uint8_t type = *buffer; // First byte is type
 		switch(type) {
@@ -26,9 +32,14 @@ bool readPVD() {
 			rootInode = lba * SECTOR_SIZE + PVD_ROOT_OFFSET;
 			rootLBA = pvd.pvd.root.extend;
 			rootSize = pvd.pvd.root.extlen;
+
+			std::munmap(buffer);
+			std::smDrop(smid);
 			return true;
 		case VD::Types::TERMINATOR:
 			// Tough luck
+			std::munmap(buffer);
+			std::smDrop(smid);
 			return false;
 		};
 

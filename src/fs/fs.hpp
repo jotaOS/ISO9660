@@ -8,14 +8,13 @@
 #include <abstract.hpp>
 
 extern std::UUID uuid;
-extern uint8_t* buffer;
 
 extern Inode rootInode;
 extern LBA rootLBA;
 extern size_t rootSize;
 
-bool readLBA(LBA lba);
-uint8_t* readBytes(LBA start, size_t sz, uint8_t* hint=nullptr);
+bool readLBAs(std::SMID smid, LBA lba, size_t n);
+bool readBytes(std::SMID smid, LBA start, size_t sz);
 bool readPVD();
 
 size_t findInode(const char* name);
