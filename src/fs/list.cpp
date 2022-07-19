@@ -12,7 +12,7 @@ std::unordered_map<std::string, File> list(Inode inode) {
 
 	std::unordered_map<std::string, File> ret;
 
-	size_t npages = (sz + PAGE_SIZE - 1) / PAGE_SIZE;
+	size_t npages = NPAGES(sz);
 	std::SMID smid = std::smMake(npages);
 	uint8_t* buffer = (uint8_t*)std::smMap(smid);
 	if(!readBytes(smid, extend, sz)) {

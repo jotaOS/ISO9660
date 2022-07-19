@@ -9,7 +9,7 @@ void marshallList(Inode inode, uint8_t*& raw, size_t& npages) {
 	for(auto const& x : l)
 		sz += x.f.size() + 1; // + 1 because of null termination
 
-	npages = (sz + PAGE_SIZE - 1) / PAGE_SIZE;
+	npages = NPAGES(sz);
 
 	// Get that buffer
 	raw = new uint8_t[sz + sizeof(Inode)];
