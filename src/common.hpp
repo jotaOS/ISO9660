@@ -4,7 +4,7 @@
 #include <types>
 #include <abstract.hpp>
 
-void marshallList(Inode inode, uint8_t*& raw, size_t& npages);
+void marshallList(Inode inode, uint8_t*& raw, size_t& sz);
 void exportProcedures();
 
 #endif

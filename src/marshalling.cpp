@@ -1,15 +1,13 @@
 #include <fs/fs.hpp>
 
-void marshallList(Inode inode, uint8_t*& raw, size_t& npages) {
+void marshallList(Inode inode, uint8_t*& raw, size_t& sz) {
 	// How much space do I need?
-	size_t sz = 0;
+	sz = 0;
 
 	auto l = list(inode);
 	sz += sizeof(File) * l.size();
 	for(auto const& x : l)
 		sz += x.f.size() + 1; // + 1 because of null termination
-
-	npages = NPAGES(sz);
 
 	// Get that buffer
 	raw = new uint8_t[sz + sizeof(Inode)];

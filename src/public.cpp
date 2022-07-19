@@ -52,9 +52,9 @@ size_t publistSize(std::PID client, Inode inode) {
 	setupLock.release();
 
 	uint8_t* marshalled = nullptr;
-	size_t npages = 0;
-	marshallList(inode, marshalled, npages);
-	return npages;
+	size_t sz = 0;
+	marshallList(inode, marshalled, sz);
+	return NPAGES(sz);
 }
 
 bool publist(std::PID client, std::SMID smid, Inode inode) {
@@ -72,10 +72,10 @@ bool publist(std::PID client, std::SMID smid, Inode inode) {
 	uint8_t* buffer = link.f;
 
 	uint8_t* marshalled = nullptr;
-	size_t mnpages = 0;
-	marshallList(inode, marshalled, mnpages);
+	size_t sz = 0;
+	marshallList(inode, marshalled, sz);
 
-	memcpy(buffer, marshalled, std::min(npages, mnpages) * PAGE_SIZE);
+	memcpy(buffer, marshalled, std::min(npages * PAGE_SIZE, sz));
 	std::sm::unlink(smid);
 	return true;
 }
