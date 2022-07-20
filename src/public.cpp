@@ -4,12 +4,14 @@
 #include "fs/fs.hpp"
 #include <unordered_map>
 #include <mutex>
+#include <registry>
 
 static std::mutex setupLock;
 static bool isSetup = false;
 std::UUID uuid;
 bool setup(std::PID client, uint64_t uuida, uint64_t uuidb) {
-	IGNORE(client);
+	if(!std::registry::has(client, "ISO9660_SETUP"))
+		return false;
 
 	setupLock.acquire();
 	if(isSetup) {
@@ -29,7 +31,8 @@ bool setup(std::PID client, uint64_t uuida, uint64_t uuidb) {
 }
 
 Inode getRoot(std::PID client) {
-	IGNORE(client);
+	if(!std::registry::has(client, "ISO9660_READ"))
+		return false;
 
 	setupLock.acquire();
 	if(!isSetup) {
@@ -42,7 +45,8 @@ Inode getRoot(std::PID client) {
 }
 
 size_t publistSize(std::PID client, Inode inode) {
-	IGNORE(client);
+	if(!std::registry::has(client, "ISO9660_READ"))
+		return 0;
 
 	setupLock.acquire();
 	if(!isSetup) {
@@ -58,6 +62,9 @@ size_t publistSize(std::PID client, Inode inode) {
 }
 
 bool publist(std::PID client, std::SMID smid, Inode inode) {
+	if(!std::registry::has(client, "ISO9660_READ"))
+		return false;
+
 	setupLock.acquire();
 	if(!isSetup) {
 		setupLock.release();
@@ -81,6 +88,9 @@ bool publist(std::PID client, std::SMID smid, Inode inode) {
 }
 
 size_t pubread(std::PID client, std::SMID smid, Inode inode, size_t page, size_t n) {
+	if(!std::registry::has(client, "ISO9660_READ"))
+		return 0;
+
 	setupLock.acquire();
 	if(!isSetup) {
 		setupLock.release();
@@ -91,7 +101,7 @@ size_t pubread(std::PID client, std::SMID smid, Inode inode, size_t page, size_t
 	// About the shared memory
 	auto link = std::sm::link(client, smid);
 	if(!link.s)
-		return false;
+		return 0;
 
 	// About the file
 	LBA lba = getFileLBA(inode) + page * 2;
