@@ -72,6 +72,14 @@ std::unordered_map<std::string, File> list(Inode inode) {
 		}
 
 		offset += dir->length;
+
+		// Space in this sector?
+		size_t spaceLeft = SECTOR_SIZE - (offset % SECTOR_SIZE);
+		if(spaceLeft < MIN_SIZE_DIRECTORY_ENTRY) {
+			// Not enough space. The rest is padded with zeros,
+			// must be in the next one
+			offset += spaceLeft;
+		}
 	}
 
 	std::munmap(buffer, npages);

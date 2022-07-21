@@ -4,6 +4,7 @@
 #include <types>
 
 #define SECTOR_SIZE 2048
+#define MIN_SIZE_DIRECTORY_ENTRY 32
 
 typedef uint32_t LBA;
 
